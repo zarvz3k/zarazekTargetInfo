@@ -57,12 +57,11 @@ public class ZarazekTargetClient implements ClientModInitializer {
     public static final float SCALE_MAX = 1.5f;
 
     // ustawienia (zmieniane w /zt config, zapisywane do pliku)
-    public static int posX = 5;
-    public static int posY = 5;
+    public static int posX = 115;
+    public static int posY = 70;
     public static float scale = 1.0f;
-    public static int barColor = 0x2DD4BF;      // RGB
-    public static boolean dynamicColor = false; // kolor zalezny od HP
-    public static boolean showHat = true;       // warstwa hat na twarzy
+    public static int barColor = 0x7B7B7B;      // RGB
+    public static boolean dynamicColor = true;  // kolor zalezny od HP
 
     private static boolean openConfig = false;
     private static AbstractClientPlayerEntity lastTarget;
@@ -103,7 +102,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
         p.setProperty("scale", String.valueOf(scale));
         p.setProperty("barColor", String.format("%06X", barColor));
         p.setProperty("dynamicColor", String.valueOf(dynamicColor));
-        p.setProperty("showHat", String.valueOf(showHat));
         try (OutputStream out = Files.newOutputStream(configPath())) {
             p.store(out, "zarazekTarget");
         } catch (IOException ignored) {
@@ -126,7 +124,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
             scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, sc));
             barColor = Integer.parseInt(p.getProperty("barColor", String.format("%06X", barColor)).trim(), 16) & 0xFFFFFF;
             dynamicColor = Boolean.parseBoolean(p.getProperty("dynamicColor", String.valueOf(dynamicColor)).trim());
-            showHat = Boolean.parseBoolean(p.getProperty("showHat", String.valueOf(showHat)).trim());
         } catch (NumberFormatException ignored) {
         }
     }
@@ -349,7 +346,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
         Identifier tex = target.getSkinTextures().texture();
         ctx.drawTexture(RenderLayer::getGuiTextured, tex, x, y, 8.0f, 8.0f, size, size, 8, 8, 64, 64);
 
-        if (showHat && target.isPartVisible(PlayerModelPart.HAT)) {
+        if (target.isPartVisible(PlayerModelPart.HAT)) {
             int pad = 2; // o tyle hat wystaje poza twarz
             ctx.drawTexture(RenderLayer::getGuiTextured, tex, x - pad, y - pad, 40.0f, 8.0f,
                     size + 2 * pad, size + 2 * pad, 8, 8, 64, 64);
