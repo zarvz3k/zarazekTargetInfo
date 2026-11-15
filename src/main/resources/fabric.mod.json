@@ -3,9 +3,9 @@
 	"id": "zarazektarget",
 	"version": "${version}",
 	"name": "zarazektarget",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "",
 	"authors": [
-		"Me!"
+		"zarazek_"
 	],
 	"contact": {
 		"homepage": "https://fabricmc.net/",
