@@ -20,20 +20,25 @@ import java.util.Optional;
 
 public class ZarazekTargetClient implements ClientModInitializer {
 
-    // wymiary panelu
+    // wymiary panelu (przed skalowaniem)
     private static final int W = 132;
     private static final int H = 72;
     private static final int FACE = 36;
 
-    // zasieg celowania i margines wokol hitboxa (w kratkach)
-    private static final double REACH = 6.0;
+    // zasieg celowania (4 kratki) i margines wokol hitboxa
+    private static final double REACH = 4.0;
     private static final double MARGIN = 0.5;
-    // jak dlugo panel zostaje po odejsciu celownika od gracza
     private static final long HOLD_MS = 1500;
 
-    // pozycja panelu (lewy gorny rog), zmieniana w /zt config
+    public static final float SCALE_MIN = 0.6f;
+    public static final float SCALE_MAX = 1.5f;
+
+    // ustawienia (zmieniane w /zt config)
     public static int posX = 5;
     public static int posY = 5;
+    public static float scale = 1.0f;
+    public static int barColor = 0x2DD4BF;      // RGB
+    public static boolean dynamicColor = false; // kolor zalezny od HP
 
     private static boolean openConfig = false;
     private static AbstractClientPlayerEntity lastTarget;
@@ -43,7 +48,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
     public void onInitializeClient() {
         HudRenderCallback.EVENT.register(ZarazekTargetClient::render);
 
-        // komenda /zt config
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("zt")
                         .then(ClientCommandManager.literal("config")
@@ -60,7 +64,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
         });
     }
 
-    // znajduje najblizszego gracza, przez ktorego hitbox (powiekszony o MARGIN) przechodzi promien z celownika
     private static AbstractClientPlayerEntity findTarget(MinecraftClient client) {
         Vec3d eye = client.player.getCameraPosVec(1.0f);
         Vec3d end = eye.add(client.player.getRotationVec(1.0f).multiply(REACH));
@@ -78,6 +81,20 @@ public class ZarazekTargetClient implements ClientModInitializer {
             }
         }
         return best;
+    }
+
+    // zaokraglony prostokat bez nakladania sie pikseli (dziala z polprzezroczystymi kolorami)
+    static void roundedRect(DrawContext ctx, int x, int y, int w, int h, int r, int color) {
+        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+        for (int i = 0; i < r; i++) {
+            double dy = r - i - 0.5;
+            int inset = r - (int) Math.round(Math.sqrt(r * r - dy * dy));
+            ctx.fill(x + inset, y + i, x + w - inset, y + i + 1, color);
+            ctx.fill(x + inset, y + h - 1 - i, x + w - inset, y + h - i, color);
+        }
+        if (h - 2 * r > 0) {
+            ctx.fill(x, y + r, x + w, y + h - r, color);
+        }
     }
 
     private static void render(DrawContext ctx, RenderTickCounter tickCounter) {
@@ -98,29 +115,29 @@ public class ZarazekTargetClient implements ClientModInitializer {
 
         AbstractClientPlayerEntity target = lastTarget;
 
-        // pozycja z configu, przycieta do okna
-        int x = Math.max(0, Math.min(posX, ctx.getScaledWindowWidth() - W));
-        int y = Math.max(0, Math.min(posY, ctx.getScaledWindowHeight() - H));
+        float s = Math.max(SCALE_MIN, Math.min(SCALE_MAX, scale));
+        int x = Math.max(0, Math.min(posX, ctx.getScaledWindowWidth() - Math.round(W * s)));
+        int y = Math.max(0, Math.min(posY, ctx.getScaledWindowHeight() - Math.round(H * s)));
 
-        // tlo
-        ctx.fill(x, y, x + W, y + H, 0xB0101418);
-        ctx.fill(x, y, x + W, y + 1, 0x60FFFFFF);
-        ctx.fill(x, y + H - 1, x + W, y + H, 0x60FFFFFF);
-        ctx.fill(x, y, x + 1, y + H, 0x60FFFFFF);
-        ctx.fill(x + W - 1, y, x + W, y + H, 0x60FFFFFF);
+        ctx.getMatrices().push();
+        ctx.getMatrices().translate(x, y, 0);
+        ctx.getMatrices().scale(s, s, 1.0f);
 
-        // zbroja po lewej (2x2): helm | napiersnik / buty | spodnie
-        slot(ctx, client, x + 6, y + 6, target.getEquippedStack(EquipmentSlot.HEAD));
-        slot(ctx, client, x + 24, y + 6, target.getEquippedStack(EquipmentSlot.CHEST));
-        slot(ctx, client, x + 6, y + 24, target.getEquippedStack(EquipmentSlot.FEET));
-        slot(ctx, client, x + 24, y + 24, target.getEquippedStack(EquipmentSlot.LEGS));
+        // tlo bez ramki, zaokraglone rogi
+        roundedRect(ctx, 0, 0, W, H, 6, 0xB0101418);
 
-        // twarz na srodku
-        PlayerSkinDrawer.draw(ctx, target.getSkinTextures(), x + 48, y + 6, FACE);
+        // zbroja po lewej (2x2)
+        slot(ctx, client, 6, 6, target.getEquippedStack(EquipmentSlot.HEAD));
+        slot(ctx, client, 24, 6, target.getEquippedStack(EquipmentSlot.CHEST));
+        slot(ctx, client, 6, 24, target.getEquippedStack(EquipmentSlot.FEET));
+        slot(ctx, client, 24, 24, target.getEquippedStack(EquipmentSlot.LEGS));
 
-        // po prawej: mainhand (lewy slot), offhand (prawy slot)
-        slot(ctx, client, x + 90, y + 15, target.getMainHandStack());
-        slot(ctx, client, x + 108, y + 15, target.getOffHandStack());
+        // twarz
+        PlayerSkinDrawer.draw(ctx, target.getSkinTextures(), 48, 6, FACE);
+
+        // mainhand i offhand
+        slot(ctx, client, 90, 15, target.getMainHandStack());
+        slot(ctx, client, 108, 15, target.getOffHandStack());
 
         // pasek hp
         float hp = target.getHealth();
@@ -128,25 +145,32 @@ public class ZarazekTargetClient implements ClientModInitializer {
         float absorption = target.getAbsorptionAmount();
         float frac = Math.min(1.0f, Math.max(0.0f, hp / max));
 
-        int bx = x + 6;
-        int by = y + 54;
+        int bx = 6;
+        int by = 54;
         int bw = W - 12;
         int bh = 12;
-        ctx.fill(bx, by, bx + bw, by + bh, 0xFF000000);
-        ctx.fill(bx + 1, by + 1, bx + bw - 1, by + bh - 1, 0xFF2A2F33);
-        int fillW = (int) ((bw - 2) * frac);
-        int color = frac > 0.5f ? 0xFF2DD4BF : (frac > 0.25f ? 0xFFF5C542 : 0xFFE5484D);
-        ctx.fill(bx + 1, by + 1, bx + 1 + fillW, by + bh - 1, color);
+        roundedRect(ctx, bx, by, bw, bh, 4, 0xFF2A2F33);
+
+        int fillW = (int) (bw * frac);
+        int rgb;
+        if (dynamicColor) {
+            rgb = frac > 0.5f ? barColor : (frac > 0.25f ? 0xF5C542 : 0xE5484D);
+        } else {
+            rgb = barColor;
+        }
+        if (fillW > 0) {
+            roundedRect(ctx, bx, by, fillW, bh, Math.min(4, fillW / 2), 0xFF000000 | rgb);
+        }
 
         String label = String.format("%.1f", hp + absorption);
         ctx.drawCenteredTextWithShadow(client.textRenderer, Text.literal(label),
                 bx + bw / 2, by + 2, 0xFFFFFFFF);
+
+        ctx.getMatrices().pop();
     }
 
     private static void slot(DrawContext ctx, MinecraftClient client, int x, int y, ItemStack stack) {
-        ctx.fill(x, y, x + 18, y + 18, 0x55000000);
-        ctx.fill(x, y, x + 18, y + 1, 0x30FFFFFF);
-        ctx.fill(x, y, x + 1, y + 18, 0x30FFFFFF);
+        roundedRect(ctx, x, y, 18, 18, 3, 0x55000000);
         if (stack.isEmpty()) return;
         ctx.drawItem(stack, x + 1, y + 1);
         ctx.drawStackOverlay(client.textRenderer, stack, x + 1, y + 1);
