@@ -263,11 +263,11 @@ public class ZarazekTargetClient implements ClientModInitializer {
         // tlo bez ramki, mocno zaokraglone rogi
         roundedRect(ctx, 0, 0, W, H, PANEL_R, PANEL_COLOR);
 
-        // zbroja po lewej (2x2)
-        slot(ctx, client, 6, 6, target.getEquippedStack(EquipmentSlot.HEAD));
-        slot(ctx, client, 24, 6, target.getEquippedStack(EquipmentSlot.CHEST));
-        slot(ctx, client, 6, 24, target.getEquippedStack(EquipmentSlot.FEET));
-        slot(ctx, client, 24, 24, target.getEquippedStack(EquipmentSlot.LEGS));
+        // zbroja po lewej (2x2), odstep 2 px
+        slot(ctx, client, 6, 5, target.getEquippedStack(EquipmentSlot.HEAD));
+        slot(ctx, client, 26, 5, target.getEquippedStack(EquipmentSlot.CHEST));
+        slot(ctx, client, 6, 25, target.getEquippedStack(EquipmentSlot.FEET));
+        slot(ctx, client, 26, 25, target.getEquippedStack(EquipmentSlot.LEGS));
 
         // twarz (z przezroczystoscia animacji)
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, alpha);
@@ -275,8 +275,8 @@ public class ZarazekTargetClient implements ClientModInitializer {
         ctx.draw();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-        // mainhand i offhand
-        slot(ctx, client, 90, 15, target.getMainHandStack());
+        // mainhand i offhand, odstep 2 px
+        slot(ctx, client, 88, 15, target.getMainHandStack());
         slot(ctx, client, 108, 15, target.getOffHandStack());
 
         // pasek hp
@@ -289,7 +289,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
         int by = 46;
         int bw = W - 12;
         int bh = 12;
-        float rad = bh / 2.0f;
+        float rad = 3.0f;
         roundedRect(ctx, bx, by, bw, bh, rad, BAR_TRACK);
 
         int rgb;
