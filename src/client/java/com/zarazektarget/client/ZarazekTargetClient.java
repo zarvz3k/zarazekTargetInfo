@@ -9,12 +9,14 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.PlayerSkinDrawer;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.player.PlayerModelPart;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
 import net.minecraft.util.math.Vec3d;
 
@@ -60,6 +62,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
     public static float scale = 1.0f;
     public static int barColor = 0x2DD4BF;      // RGB
     public static boolean dynamicColor = false; // kolor zalezny od HP
+    public static boolean showHat = true;       // warstwa hat na twarzy
 
     private static boolean openConfig = false;
     private static AbstractClientPlayerEntity lastTarget;
@@ -100,6 +103,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
         p.setProperty("scale", String.valueOf(scale));
         p.setProperty("barColor", String.format("%06X", barColor));
         p.setProperty("dynamicColor", String.valueOf(dynamicColor));
+        p.setProperty("showHat", String.valueOf(showHat));
         try (OutputStream out = Files.newOutputStream(configPath())) {
             p.store(out, "zarazekTarget");
         } catch (IOException ignored) {
@@ -122,6 +126,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
             scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, sc));
             barColor = Integer.parseInt(p.getProperty("barColor", String.format("%06X", barColor)).trim(), 16) & 0xFFFFFF;
             dynamicColor = Boolean.parseBoolean(p.getProperty("dynamicColor", String.valueOf(dynamicColor)).trim());
+            showHat = Boolean.parseBoolean(p.getProperty("showHat", String.valueOf(showHat)).trim());
         } catch (NumberFormatException ignored) {
         }
     }
@@ -267,7 +272,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
 
         AbstractClientPlayerEntity target = lastTarget;
 
-        // ease-out cubic: przy rosnieciu szybki start i wyhamowanie, przy znikaniu odwrotnie
+        // ease-out cubic
         float anim = 1.0f - (float) Math.pow(1.0f - progress, 3);
         alpha = anim;
         if (anim < 0.01f) return;
@@ -295,9 +300,9 @@ public class ZarazekTargetClient implements ClientModInitializer {
         slot(ctx, client, 6, 25, target.getEquippedStack(EquipmentSlot.FEET));
         slot(ctx, client, 26, 25, target.getEquippedStack(EquipmentSlot.LEGS));
 
-        // twarz (z przezroczystoscia animacji)
+        // twarz + hat (z przezroczystoscia animacji)
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, alpha);
-        PlayerSkinDrawer.draw(ctx, target.getSkinTextures(), 48, 6, FACE);
+        drawFace(ctx, target, 48, 6, FACE);
         ctx.draw();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -337,6 +342,18 @@ public class ZarazekTargetClient implements ClientModInitializer {
         }
 
         ctx.getMatrices().pop();
+    }
+
+    // twarz + warstwa hat lekko powiekszona (efekt 3D jak na glowie w grze)
+    private static void drawFace(DrawContext ctx, AbstractClientPlayerEntity target, int x, int y, int size) {
+        Identifier tex = target.getSkinTextures().texture();
+        ctx.drawTexture(RenderLayer::getGuiTextured, tex, x, y, 8.0f, 8.0f, size, size, 8, 8, 64, 64);
+
+        if (showHat && target.isPartVisible(PlayerModelPart.HAT)) {
+            int pad = 2; // o tyle hat wystaje poza twarz
+            ctx.drawTexture(RenderLayer::getGuiTextured, tex, x - pad, y - pad, 40.0f, 8.0f,
+                    size + 2 * pad, size + 2 * pad, 8, 8, 64, 64);
+        }
     }
 
     // slot: szara ramka, srodek w kolorze tla panelu
