@@ -3,16 +3,35 @@ package com.zarazektarget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
+import net.minecraft.util.Util;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.IntConsumer;
 
 public class ZarazekTargetScreen extends Screen {
 
+    private static final int PANEL_W = 200;
+    private static final int PANEL_H = 190;
+    private static final long ANIM_MS = 500;
+    private static final int TEXT = 0xFF404040;
+
+    // animacja wjazdu od dolu
+    private final long openTime = Util.getMeasuringTimeMs();
+    private int yOffset = 0;
+    private final Map<ClickableWidget, Integer> baseY = new HashMap<>();
+
     public ZarazekTargetScreen() {
         super(Text.literal("zarazekTarget"));
+    }
+
+    private <T extends ClickableWidget> T track(T widget) {
+        baseY.put(widget, widget.getY());
+        return this.addDrawableChild(widget);
     }
 
     // suwak rozmiaru 0.6x - 1.5x, co 0.05
@@ -42,18 +61,19 @@ public class ZarazekTargetScreen extends Screen {
 
     @Override
     protected void init() {
-        int cx = this.width / 2;
-        int cy = this.height / 2;
+        baseY.clear();
+        int left = (this.width - PANEL_W) / 2;
+        int top = (this.height - PANEL_H) / 2;
 
         // pozycja X / Y
-        addNumberField(cx - 60, cy - 40, ZarazekTargetClient.posX, v -> ZarazekTargetClient.posX = v);
-        addNumberField(cx + 10, cy - 40, ZarazekTargetClient.posY, v -> ZarazekTargetClient.posY = v);
+        addNumberField(left + 38, top + 38, ZarazekTargetClient.posX, v -> ZarazekTargetClient.posX = v);
+        addNumberField(left + 122, top + 38, ZarazekTargetClient.posY, v -> ZarazekTargetClient.posY = v);
 
         // rozmiar
-        this.addDrawableChild(new ScaleSlider(cx - 70, cy - 12, 140, 20));
+        track(new ScaleSlider(left + 10, top + 66, 180, 20));
 
         // kolor paska hp (hex)
-        TextFieldWidget color = new TextFieldWidget(this.textRenderer, cx - 35, cy + 24, 70, 18,
+        TextFieldWidget color = new TextFieldWidget(this.textRenderer, left + 65, top + 106, 70, 18,
                 Text.literal("kolor"));
         color.setMaxLength(6);
         color.setTextPredicate(s -> s.matches("[0-9a-fA-F]{0,6}"));
@@ -66,30 +86,20 @@ public class ZarazekTargetScreen extends Screen {
                 }
             }
         });
-        this.addDrawableChild(color);
+        track(color);
 
         // kolor zalezny od hp
-        this.addDrawableChild(ButtonWidget.builder(dynamicText(), b -> {
+        track(ButtonWidget.builder(dynamicText(), b -> {
             ZarazekTargetClient.dynamicColor = !ZarazekTargetClient.dynamicColor;
             b.setMessage(dynamicText());
-        }).dimensions(cx - 70, cy + 48, 140, 20).build());
+        }).dimensions(left + 10, top + 132, 180, 20).build());
 
-        // warstwa hat na twarzy
-        this.addDrawableChild(ButtonWidget.builder(hatText(), b -> {
-            ZarazekTargetClient.showHat = !ZarazekTargetClient.showHat;
-            b.setMessage(hatText());
-        }).dimensions(cx - 70, cy + 72, 140, 20).build());
-
-        this.addDrawableChild(ButtonWidget.builder(Text.literal("Gotowe"), b -> this.close())
-                .dimensions(cx - 50, cy + 98, 100, 20).build());
+        track(ButtonWidget.builder(Text.literal("Gotowe"), b -> this.close())
+                .dimensions(left + 50, top + 160, 100, 20).build());
     }
 
     private static Text dynamicText() {
         return Text.literal("Kolor wg HP: " + (ZarazekTargetClient.dynamicColor ? "ON" : "OFF"));
-    }
-
-    private static Text hatText() {
-        return Text.literal("Warstwa hat: " + (ZarazekTargetClient.showHat ? "ON" : "OFF"));
     }
 
     private void addNumberField(int x, int y, int current, IntConsumer setter) {
@@ -107,19 +117,57 @@ public class ZarazekTargetScreen extends Screen {
             }
             setter.accept(v);
         });
-        this.addDrawableChild(field);
+        track(field);
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        // postep animacji 0..1 z wyhamowaniem (ease-out cubic)
+        float t = Math.min(1.0f, (Util.getMeasuringTimeMs() - openTime) / (float) ANIM_MS);
+        float eased = 1.0f - (float) Math.pow(1.0f - t, 3);
+        int top = (this.height - PANEL_H) / 2;
+        yOffset = (int) ((1.0f - eased) * (this.height - top));
+
+        for (Map.Entry<ClickableWidget, Integer> e : baseY.entrySet()) {
+            e.getKey().setY(e.getValue() + yOffset);
+        }
+
         super.render(context, mouseX, mouseY, delta);
+    }
+
+    // panel i napisy rysujemy tutaj, zeby widgety byly na wierzchu
+    @Override
+    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+        super.renderBackground(context, mouseX, mouseY, delta);
+
+        int left = (this.width - PANEL_W) / 2;
+        int top = (this.height - PANEL_H) / 2 + yOffset;
+        int right = left + PANEL_W;
+        int bottom = top + PANEL_H;
+
+        // ramka i panel w stylu vanilla
+        context.fill(left, top, right, bottom, 0xFF000000);
+        context.fill(left + 1, top + 1, right - 1, bottom - 1, 0xFFC6C6C6);
+        context.fill(left + 1, top + 1, right - 1, top + 2, 0xFFFFFFFF);
+        context.fill(left + 1, top + 1, left + 2, bottom - 1, 0xFFFFFFFF);
+        context.fill(left + 1, bottom - 2, right - 1, bottom - 1, 0xFF555555);
+        context.fill(right - 2, top + 1, right - 1, bottom - 1, 0xFF555555);
+
         int cx = this.width / 2;
-        int cy = this.height / 2;
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("zarazekTarget"), cx, cy - 75, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("Pozycja panelu"), cx, cy - 62, 0xFFAAAAAA);
-        context.drawTextWithShadow(this.textRenderer, Text.literal("X"), cx - 60, cy - 50, 0xFFFFFFFF);
-        context.drawTextWithShadow(this.textRenderer, Text.literal("Y"), cx + 10, cy - 50, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal("Kolor paska HP (hex)"), cx, cy + 12, 0xFFAAAAAA);
+
+        Text title = Text.literal("zarazekTarget");
+        context.drawText(this.textRenderer, title, cx - this.textRenderer.getWidth(title) / 2,
+                top + 10, TEXT, false);
+
+        Text pos = Text.literal("Pozycja panelu");
+        context.drawText(this.textRenderer, pos, cx - this.textRenderer.getWidth(pos) / 2,
+                top + 24, TEXT, false);
+        context.drawText(this.textRenderer, Text.literal("X"), left + 26, top + 43, TEXT, false);
+        context.drawText(this.textRenderer, Text.literal("Y"), left + 110, top + 43, TEXT, false);
+
+        Text hex = Text.literal("Kolor paska HP (hex)");
+        context.drawText(this.textRenderer, hex, cx - this.textRenderer.getWidth(hex) / 2,
+                top + 94, TEXT, false);
     }
 
     @Override
