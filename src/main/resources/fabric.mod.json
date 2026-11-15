@@ -2,33 +2,18 @@
 	"schemaVersion": 1,
 	"id": "zarazektarget",
 	"version": "${version}",
-	"name": "zarazektarget",
-	"description": "",
+	"name": "zarazekTarget",
+	"description": "Target info - mod made by zarazek_",
 	"authors": [
 		"zarazek_"
 	],
-	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
-	},
 	"license": "CC0-1.0",
-	"icon": "assets/zarazektarget/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"com.zarazektarget.Zarazektarget"
-		],
 		"client": [
-			"com.zarazektarget.client.ZarazektargetClient"
+			"com.zarazektarget.ZarazekTargetClient"
 		]
 	},
-	"mixins": [
-		"zarazektarget.mixins.json",
-		{
-			"config": "zarazektarget.client.mixins.json",
-			"environment": "client"
-		}
-	],
 	"depends": {
 		"fabricloader": ">=0.20.1",
 		"minecraft": "~1.21.4",
