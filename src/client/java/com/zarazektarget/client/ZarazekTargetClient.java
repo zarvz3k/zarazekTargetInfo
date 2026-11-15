@@ -44,9 +44,11 @@ public class ZarazekTargetClient implements ClientModInitializer {
     private static final double MARGIN = 0.5;
     private static final long HOLD_MS = 1500;
 
-    // animacja fade in (0.4 s)
-    private static final long FADE_MS = 400;
-    private static long fadeStart = 0;
+    // animacje: zoom in 0.4 s, zoom out 0.3 s (od/do kropki w srodku panelu)
+    private static final long IN_MS = 400;
+    private static final long OUT_MS = 300;
+    private static float progress = 0.0f; // 0..1, surowy postep animacji
+    private static long lastFrame = 0;
     private static float alpha = 1.0f;
 
     public static final float SCALE_MIN = 0.6f;
@@ -233,32 +235,56 @@ public class ZarazekTargetClient implements ClientModInitializer {
         if (client.player == null || client.world == null || client.options.hudHidden) return;
 
         long now = Util.getMeasuringTimeMs();
+        long dt = lastFrame == 0 ? 0 : Math.min(100, now - lastFrame);
+        lastFrame = now;
+
         AbstractClientPlayerEntity found = findTarget(client);
         if (found != null) {
-            // panel pojawia sie od zera -> start animacji
-            if (lastTarget == null) fadeStart = now;
             lastTarget = found;
             lastSeen = now;
         }
-        if (lastTarget == null) return;
-        if (now - lastSeen > HOLD_MS || lastTarget.isRemoved() || !lastTarget.isAlive()) {
-            lastTarget = null;
+        if (lastTarget == null) {
+            progress = 0.0f;
             return;
+        }
+        if (lastTarget.isRemoved() || !lastTarget.isAlive()) {
+            lastTarget = null;
+            progress = 0.0f;
+            return;
+        }
+
+        // czy panel ma byc widoczny (cel w zasiegu lub w czasie przytrzymania)
+        boolean active = now - lastSeen <= HOLD_MS;
+        if (active) {
+            progress = Math.min(1.0f, progress + dt / (float) IN_MS);
+        } else {
+            progress = Math.max(0.0f, progress - dt / (float) OUT_MS);
+            if (progress <= 0.0f) {
+                lastTarget = null;
+                return;
+            }
         }
 
         AbstractClientPlayerEntity target = lastTarget;
 
-        // postep fade in 0..1 (ease-out)
-        float t = Math.min(1.0f, (now - fadeStart) / (float) FADE_MS);
-        alpha = 1.0f - (1.0f - t) * (1.0f - t);
+        // ease-out cubic: przy rosnieciu szybki start i wyhamowanie, przy znikaniu odwrotnie
+        float anim = 1.0f - (float) Math.pow(1.0f - progress, 3);
+        alpha = anim;
+        if (anim < 0.01f) return;
 
         float s = Math.max(SCALE_MIN, Math.min(SCALE_MAX, scale));
         int x = Math.max(0, Math.min(posX, ctx.getScaledWindowWidth() - Math.round(W * s)));
         int y = Math.max(0, Math.min(posY, ctx.getScaledWindowHeight() - Math.round(H * s)));
 
+        // zoom od/do srodka panelu (od kropki)
+        float cx = x + W * s / 2.0f;
+        float cy = y + H * s / 2.0f;
+        float zs = s * anim;
+
         ctx.getMatrices().push();
-        ctx.getMatrices().translate(x, y, 0);
-        ctx.getMatrices().scale(s, s, 1.0f);
+        ctx.getMatrices().translate(cx, cy, 0);
+        ctx.getMatrices().scale(zs, zs, 1.0f);
+        ctx.getMatrices().translate(-W / 2.0f, -H / 2.0f, 0);
 
         // tlo bez ramki, mocno zaokraglone rogi
         roundedRect(ctx, 0, 0, W, H, PANEL_R, PANEL_COLOR);
@@ -303,7 +329,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
             roundedRect(ctx, bx, by, fillW, bh, Math.min(rad, fillW / 2.0f), 0xFF000000 | rgb);
         }
 
-        // tekst: vanilla traktuje alfe <= 3 jako pelna, wiec pomijamy go na samym poczatku animacji
+        // tekst: vanilla traktuje alfe <= 3 jako pelna, wiec pomijamy go na poczatku/koncu animacji
         if (alpha > 0.1f) {
             String label = String.format("%.1f", hp + absorption);
             ctx.drawCenteredTextWithShadow(client.textRenderer, Text.literal(label),
