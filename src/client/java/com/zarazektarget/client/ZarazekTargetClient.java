@@ -47,8 +47,8 @@ public class ZarazekTargetClient implements ClientModInitializer {
     private static final long HOLD_MS = 1500;
 
     // animacje: zoom in 0.4 s, zoom out 0.3 s (od/do kropki w srodku panelu)
-    private static final long IN_MS = 400;
-    private static final long OUT_MS = 300;
+    private static final long IN_MS = 250;
+    private static final long OUT_MS = 250;
     private static float progress = 0.0f; // 0..1, surowy postep animacji
     private static long lastFrame = 0;
     private static float alpha = 1.0f;
