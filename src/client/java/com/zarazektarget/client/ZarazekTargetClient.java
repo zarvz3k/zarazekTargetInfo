@@ -60,7 +60,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
     public static int posX = 115;
     public static int posY = 70;
     public static float scale = 1.0f;
-    public static int barColor = 0x7B7B7B;      // RGB
+    public static int barColor = 0x666666;      // RGB
     public static boolean dynamicColor = true;  // kolor zalezny od HP
 
     private static boolean openConfig = false;
