@@ -74,12 +74,22 @@ public class ZarazekTargetScreen extends Screen {
             b.setMessage(dynamicText());
         }).dimensions(cx - 70, cy + 48, 140, 20).build());
 
+        // warstwa hat na twarzy
+        this.addDrawableChild(ButtonWidget.builder(hatText(), b -> {
+            ZarazekTargetClient.showHat = !ZarazekTargetClient.showHat;
+            b.setMessage(hatText());
+        }).dimensions(cx - 70, cy + 72, 140, 20).build());
+
         this.addDrawableChild(ButtonWidget.builder(Text.literal("Gotowe"), b -> this.close())
-                .dimensions(cx - 50, cy + 74, 100, 20).build());
+                .dimensions(cx - 50, cy + 98, 100, 20).build());
     }
 
     private static Text dynamicText() {
         return Text.literal("Kolor wg HP: " + (ZarazekTargetClient.dynamicColor ? "ON" : "OFF"));
+    }
+
+    private static Text hatText() {
+        return Text.literal("Warstwa hat: " + (ZarazekTargetClient.showHat ? "ON" : "OFF"));
     }
 
     private void addNumberField(int x, int y, int current, IntConsumer setter) {
