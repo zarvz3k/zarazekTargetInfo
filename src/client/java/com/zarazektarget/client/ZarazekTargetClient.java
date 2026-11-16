@@ -1,6 +1,7 @@
 package com.zarazektarget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -12,9 +13,15 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderTickCounter;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ItemEnchantmentsComponent;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerModelPart;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
@@ -46,7 +53,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
     private static final double MARGIN = 0.5;
     private static final long HOLD_MS = 1500;
 
-    // animacje: zoom in 0.4 s, zoom out 0.3 s (od/do kropki w srodku panelu)
+    // animacje
     private static final long IN_MS = 250;
     private static final long OUT_MS = 250;
     private static float progress = 0.0f; // 0..1, surowy postep animacji
@@ -62,6 +69,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
     public static float scale = 1.0f;
     public static int barColor = 0x666666;      // RGB
     public static boolean dynamicColor = true;  // kolor zalezny od HP
+    public static int enchStyle = 1;            // 0 = S5, 1 = Sharp5, 2 = Sharpness 5
 
     private static boolean openConfig = false;
     private static AbstractClientPlayerEntity lastTarget;
@@ -102,6 +110,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
         p.setProperty("scale", String.valueOf(scale));
         p.setProperty("barColor", String.format("%06X", barColor));
         p.setProperty("dynamicColor", String.valueOf(dynamicColor));
+        p.setProperty("enchStyle", String.valueOf(enchStyle));
         try (OutputStream out = Files.newOutputStream(configPath())) {
             p.store(out, "zarazekTarget");
         } catch (IOException ignored) {
@@ -124,6 +133,7 @@ public class ZarazekTargetClient implements ClientModInitializer {
             scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, sc));
             barColor = Integer.parseInt(p.getProperty("barColor", String.format("%06X", barColor)).trim(), 16) & 0xFFFFFF;
             dynamicColor = Boolean.parseBoolean(p.getProperty("dynamicColor", String.valueOf(dynamicColor)).trim());
+            enchStyle = Math.max(0, Math.min(2, Integer.parseInt(p.getProperty("enchStyle", String.valueOf(enchStyle)).trim())));
         } catch (NumberFormatException ignored) {
         }
     }
@@ -153,13 +163,11 @@ public class ZarazekTargetClient implements ClientModInitializer {
 
     private static final int K = 4;
 
-    // mnozy alfe koloru przez aktualny postep animacji
     private static int fade(int color) {
         int a = (int) (((color >>> 24) & 0xFF) * alpha);
         return (a << 24) | (color & 0xFFFFFF);
     }
 
-    // przesuniecie krawedzi w wierszu j dla zaokraglonego prostokata (w pod-pikselach)
     private static int insetAt(int j, int h, int r) {
         if (r <= 0) return 0;
         int jj = (j >= h - r) ? h - 1 - j : j;
@@ -185,11 +193,10 @@ public class ZarazekTargetClient implements ClientModInitializer {
         if (w <= 2 * b || h <= 2 * b) return;
         r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
         int ri = Math.max(0, r - b);
-        int iw = w - 2 * b;
         int ih = h - 2 * b;
 
         int[] outer = new int[h];
-        int[] inner = new int[h]; // -1 = brak wnetrza w tym wierszu
+        int[] inner = new int[h];
         for (int j = 0; j < h; j++) {
             outer[j] = insetAt(j, h, r);
             int jj = j - b;
@@ -212,7 +219,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
         }
     }
 
-    // wypelniony zaokraglony prostokat; wspolrzedne w jednostkach GUI
     private static void roundedRect(DrawContext ctx, float x, float y, float w, float h, float r, int color) {
         ctx.getMatrices().push();
         ctx.getMatrices().scale(1.0f / K, 1.0f / K, 1.0f);
@@ -221,7 +227,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
         ctx.getMatrices().pop();
     }
 
-    // sama ramka (srodek przezroczysty)
     private static void roundedBorder(DrawContext ctx, float x, float y, float w, float h, float r, float bw, int color) {
         ctx.getMatrices().push();
         ctx.getMatrices().scale(1.0f / K, 1.0f / K, 1.0f);
@@ -255,7 +260,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
             return;
         }
 
-        // czy panel ma byc widoczny (cel w zasiegu lub w czasie przytrzymania)
         boolean active = now - lastSeen <= HOLD_MS;
         if (active) {
             progress = Math.min(1.0f, progress + dt / (float) IN_MS);
@@ -269,7 +273,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
 
         AbstractClientPlayerEntity target = lastTarget;
 
-        // ease-out cubic
         float anim = 1.0f - (float) Math.pow(1.0f - progress, 3);
         alpha = anim;
         if (anim < 0.01f) return;
@@ -278,7 +281,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
         int x = Math.max(0, Math.min(posX, ctx.getScaledWindowWidth() - Math.round(W * s)));
         int y = Math.max(0, Math.min(posY, ctx.getScaledWindowHeight() - Math.round(H * s)));
 
-        // zoom od/do srodka panelu (od kropki)
         float cx = x + W * s / 2.0f;
         float cy = y + H * s / 2.0f;
         float zs = s * anim;
@@ -288,26 +290,21 @@ public class ZarazekTargetClient implements ClientModInitializer {
         ctx.getMatrices().scale(zs, zs, 1.0f);
         ctx.getMatrices().translate(-W / 2.0f, -H / 2.0f, 0);
 
-        // tlo bez ramki, mocno zaokraglone rogi
         roundedRect(ctx, 0, 0, W, H, PANEL_R, PANEL_COLOR);
 
-        // zbroja po lewej (2x2), odstep 2 px
         slot(ctx, client, 6, 5, target.getEquippedStack(EquipmentSlot.HEAD));
         slot(ctx, client, 26, 5, target.getEquippedStack(EquipmentSlot.CHEST));
         slot(ctx, client, 6, 25, target.getEquippedStack(EquipmentSlot.FEET));
         slot(ctx, client, 26, 25, target.getEquippedStack(EquipmentSlot.LEGS));
 
-        // twarz + hat (z przezroczystoscia animacji)
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, alpha);
         drawFace(ctx, target, 48, 6, FACE);
         ctx.draw();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-        // mainhand i offhand, odstep 2 px
         slot(ctx, client, 88, 15, target.getMainHandStack());
         slot(ctx, client, 108, 15, target.getOffHandStack());
 
-        // pasek hp
         float hp = target.getHealth();
         float max = Math.max(1.0f, target.getMaxHealth());
         float absorption = target.getAbsorptionAmount();
@@ -331,7 +328,6 @@ public class ZarazekTargetClient implements ClientModInitializer {
             roundedRect(ctx, bx, by, fillW, bh, Math.min(rad, fillW / 2.0f), 0xFF000000 | rgb);
         }
 
-        // tekst: vanilla traktuje alfe <= 3 jako pelna, wiec pomijamy go na poczatku/koncu animacji
         if (alpha > 0.1f) {
             String label = String.format("%.1f", hp + absorption);
             ctx.drawCenteredTextWithShadow(client.textRenderer, Text.literal(label),
@@ -341,19 +337,18 @@ public class ZarazekTargetClient implements ClientModInitializer {
         ctx.getMatrices().pop();
     }
 
-    // twarz + warstwa hat lekko powiekszona (efekt 3D jak na glowie w grze)
     private static void drawFace(DrawContext ctx, AbstractClientPlayerEntity target, int x, int y, int size) {
         Identifier tex = target.getSkinTextures().texture();
         ctx.drawTexture(RenderLayer::getGuiTextured, tex, x, y, 8.0f, 8.0f, size, size, 8, 8, 64, 64);
 
         if (target.isPartVisible(PlayerModelPart.HAT)) {
-            int pad = 2; // o tyle hat wystaje poza twarz
+            int pad = 2;
             ctx.drawTexture(RenderLayer::getGuiTextured, tex, x - pad, y - pad, 40.0f, 8.0f,
                     size + 2 * pad, size + 2 * pad, 8, 8, 64, 64);
         }
     }
 
-    // slot: szara ramka, srodek w kolorze tla panelu
+    // slot: ramka, item, ilosc/zuzycie (vanilla) + enchanty
     private static void slot(DrawContext ctx, MinecraftClient client, int x, int y, ItemStack stack) {
         roundedBorder(ctx, x, y, 18, 18, 4, 1.0f, SLOT_BORDER);
         if (stack.isEmpty()) return;
@@ -362,5 +357,46 @@ public class ZarazekTargetClient implements ClientModInitializer {
         ctx.drawStackOverlay(client.textRenderer, stack, x + 1, y + 1);
         ctx.draw();
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+        // enchanty: male napisy w lewym gornym rogu slotu
+        if (alpha > 0.1f) {
+            ItemEnchantmentsComponent comp = stack.getOrDefault(DataComponentTypes.ENCHANTMENTS,
+                    ItemEnchantmentsComponent.DEFAULT);
+            if (comp.isEmpty()) return;
+            String[] lines = {
+                    enchLine(comp, Enchantments.SHARPNESS, "S", "Sharp", "Sharpness"),
+                    enchLine(comp, Enchantments.EFFICIENCY, "E", "Eff", "Efficiency"),
+                    enchLine(comp, Enchantments.PROTECTION, "P", "Prot", "Protection"),
+                    enchLine(comp, Enchantments.UNBREAKING, "U", "Ub", "Unbreaking")
+            };
+            ctx.getMatrices().push();
+            ctx.getMatrices().translate(x + 1, y + 1.5f, 200);
+            ctx.getMatrices().scale(0.5f, 0.5f, 1.0f);
+            int ly = 0;
+            for (String line : lines) {
+                if (line == null) continue;
+                ctx.drawText(client.textRenderer, line, 0, ly, fade(0xFFE6B8FF), true);
+                ly += 9;
+            }
+            ctx.getMatrices().pop();
+        }
+    }
+
+    private static int levelOf(ItemEnchantmentsComponent comp, RegistryKey<Enchantment> key) {
+        for (Object2IntMap.Entry<RegistryEntry<Enchantment>> e : comp.getEnchantmentEntries()) {
+            if (e.getKey().matchesKey(key)) return e.getIntValue();
+        }
+        return 0;
+    }
+
+    private static String enchLine(ItemEnchantmentsComponent comp, RegistryKey<Enchantment> key,
+                                   String shortName, String midName, String longName) {
+        int lvl = levelOf(comp, key);
+        if (lvl <= 0) return null;
+        return switch (enchStyle) {
+            case 0 -> shortName + lvl;
+            case 2 -> longName + " " + lvl;
+            default -> midName + lvl;
+        };
     }
 }
