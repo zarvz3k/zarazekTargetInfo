@@ -16,7 +16,7 @@ import java.util.function.IntConsumer;
 public class ZarazekTargetScreen extends Screen {
 
     private static final int PANEL_W = 200;
-    private static final int PANEL_H = 190;
+    private static final int PANEL_H = 216;
     private static final long ANIM_MS = 500;
     private static final int TEXT = 0xFF404040;
 
@@ -94,12 +94,23 @@ public class ZarazekTargetScreen extends Screen {
             b.setMessage(dynamicText());
         }).dimensions(left + 10, top + 132, 180, 20).build());
 
+        // styl skrotow enchantow
+        track(ButtonWidget.builder(styleText(), b -> {
+            ZarazekTargetClient.enchStyle = (ZarazekTargetClient.enchStyle + 1) % 3;
+            b.setMessage(styleText());
+        }).dimensions(left + 10, top + 158, 180, 20).build());
+
         track(ButtonWidget.builder(Text.literal("Gotowe"), b -> this.close())
-                .dimensions(left + 50, top + 160, 100, 20).build());
+                .dimensions(left + 50, top + 186, 100, 20).build());
     }
 
     private static Text dynamicText() {
         return Text.literal("Kolor wg HP: " + (ZarazekTargetClient.dynamicColor ? "ON" : "OFF"));
+    }
+
+    private static Text styleText() {
+        String[] names = {"S5", "Sharp5", "Sharpness 5"};
+        return Text.literal("Skróty enchantów: " + names[ZarazekTargetClient.enchStyle]);
     }
 
     private void addNumberField(int x, int y, int current, IntConsumer setter) {
@@ -122,7 +133,6 @@ public class ZarazekTargetScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // postep animacji 0..1 z wyhamowaniem (ease-out cubic)
         float t = Math.min(1.0f, (Util.getMeasuringTimeMs() - openTime) / (float) ANIM_MS);
         float eased = 1.0f - (float) Math.pow(1.0f - t, 3);
         int top = (this.height - PANEL_H) / 2;
@@ -135,7 +145,6 @@ public class ZarazekTargetScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
     }
 
-    // panel i napisy rysujemy tutaj, zeby widgety byly na wierzchu
     @Override
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
         super.renderBackground(context, mouseX, mouseY, delta);
@@ -145,7 +154,6 @@ public class ZarazekTargetScreen extends Screen {
         int right = left + PANEL_W;
         int bottom = top + PANEL_H;
 
-        // ramka i panel w stylu vanilla
         context.fill(left, top, right, bottom, 0xFF000000);
         context.fill(left + 1, top + 1, right - 1, bottom - 1, 0xFFC6C6C6);
         context.fill(left + 1, top + 1, right - 1, top + 2, 0xFFFFFFFF);
